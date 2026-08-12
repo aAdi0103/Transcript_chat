@@ -1,6 +1,8 @@
-// Change this to your deployed backend URL when you go beyond local testing.
-const API_BASE = "http://localhost:8000";
+// Set this once after deploying the backend. Leave it empty for local-only use.
+const DEPLOYED_API_BASE = "https://transcript-chat.onrender.com";
+const LOCAL_API_BASE = "http://localhost:8000";
 const REQUEST_TIMEOUT_MS = 60000; // fetch() never times out on its own - without this a hung backend looks like the UI "stopped."
+const HEALTH_CHECK_TIMEOUT_MS = 1500;
 const MAX_HISTORY_PER_VIDEO = 30;
 const CONTEXT_TURNS_PER_REQUEST = 6;
 
@@ -17,6 +19,7 @@ const quickQuestionBtns = document.querySelectorAll(".quick-question");
 
 let currentVideoId = null;
 let history = []; // [{question, answer}, ...]
+let apiBase = LOCAL_API_BASE;
 
 const THEME_KEY = "theme"; // global preference, not per-video
 
@@ -134,6 +137,7 @@ function showError(message) {
 
 async function init() {
   await loadTheme(); // apply before any content renders, to avoid a flash
+  await selectApiBase();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentVideoId = tab?.url ? extractVideoId(tab.url) : null;
@@ -172,6 +176,30 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+async function isBackendAvailable(baseUrl) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl}/health`, { signal: controller.signal });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function selectApiBase() {
+  const candidates = [LOCAL_API_BASE, DEPLOYED_API_BASE].filter(Boolean);
+  for (const candidate of candidates) {
+    const baseUrl = candidate.replace(/\/$/, "");
+    if (await isBackendAvailable(baseUrl)) {
+      apiBase = baseUrl;
+      return;
+    }
+  }
+}
+
 function setQuickQuestionState(disabled) {
   quickQuestionBtns.forEach((button) => {
     button.disabled = disabled;
@@ -191,7 +219,7 @@ async function askQuestion(questionOverride) {
 
   try {
     const res = await fetchWithTimeout(
-      `${API_BASE}/query`,
+      `${apiBase}/query`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -215,7 +243,7 @@ async function askQuestion(questionOverride) {
     const isTimeout = err.name === "AbortError";
     const message = isTimeout
       ? `Request took over ${REQUEST_TIMEOUT_MS / 1000}s and was cancelled — the model may be slow right now. Try again.`
-      : `${err.message} — is the backend running at ${API_BASE}?`;
+      : `${err.message} — is the backend running at ${apiBase}?`;
     showError(message);
   } finally {
     askBtn.disabled = false;

@@ -47,7 +47,7 @@ curl -X POST http://localhost:8000/query -H "Content-Type: application/json" \
 ## 3. Daily-use notes
 
 - **First question on a video is slow** — it fetches the transcript, chunks, and embeds. Subsequent questions on the same video reuse the cached retriever (as long as the backend process hasn't restarted).
-- **Backend must be running** for the extension to work locally (`uvicorn main:app --reload --port 8000` needs to stay up). For real daily use without keeping your laptop's terminal open, deploy the backend (see below) and point `API_BASE` in `popup.js` at that URL.
+- **Backend must be running** for the extension to work locally (`uvicorn main:app --reload --port 8000` needs to stay up). For real daily use without keeping your laptop's terminal open, deploy the backend (see below) and set `DEPLOYED_API_BASE` in `popup.js` to that URL.
 - **Videos with no captions** will return a clear error — your notebook's `TranscriptsDisabled` handling is preserved in `main.py`.
 
 ## 4. Deploying the backend (optional, for "always on" use)
@@ -57,9 +57,10 @@ Steps are the same regardless of host:
 1. Push `backend/` to a git repo
 2. Set `HUGGINGFACEHUB_API_TOKEN` as an environment variable on the host (not in code)
 3. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Once deployed, update `API_BASE` in `extension/popup.js` to the HTTPS URL
-5. Update `host_permissions` in `manifest.json` to that same domain instead of `localhost:8000`
-6. Reload the extension in `chrome://extensions`
+4. Set `DEPLOYED_API_BASE` in `extension/popup.js` to the HTTPS URL
+5. Reload the extension in `chrome://extensions`
+
+The extension checks `http://localhost:8000` first. If it is running, local development is used; otherwise it uses `DEPLOYED_API_BASE`. This lets the same extension build work locally and after deployment.
 
 ## 5. Known gaps to harden later
 
