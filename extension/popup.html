@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<title>Transcript Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script>
+  // Applied synchronously before paint so switching themes doesn't flash
+  // the old theme for a frame. Falls back to system preference on first run.
+  (function () {
+    try {
+      chrome.storage.local.get("theme", (result) => {
+        const theme = result.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", theme);
+      });
+    } catch (e) {
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  })();
+</script>
+<style>
+  :root {
+    --void: #eceef1;
+    --bg: #ffffff;
+    --surface: #f7f7f8;
+    --border: #e5e7eb;
+    --text: #111827;
+    --text-muted: #6b7280;
+    --text-faint: #9ca3af;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --user-bg: #eff6ff;
+    --user-text: #1e3a8a;
+    --danger-bg: #fef2f2;
+    --danger-border: #fecaca;
+    --danger-text: #b91c1c;
+    --scrollbar-thumb: #d1d5db;
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  :root[data-theme="dark"] {
+    --void: #010409;
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-faint: #6e7681;
+    --accent: #3b82f6;
+    --accent-hover: #60a5fa;
+    --user-bg: rgba(59, 130, 246, 0.16);
+    --user-text: #93c5fd;
+    --danger-bg: rgba(248, 81, 73, 0.12);
+    --danger-border: rgba(248, 81, 73, 0.4);
+    --danger-text: #ffa198;
+    --scrollbar-thumb: #30363d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    width: 380px;
+    margin: 0;
+    padding: 8px;
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .shell {
+    background: var(--bg);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 6px rgba(0, 0, 0, 0.05);
+  }
+
+  /* ---------- header ---------- */
+  .header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .header-sub {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+  .icon-btn svg { width: 15px; height: 15px; }
+  .clear-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: 6px;
+  }
+  .clear-btn:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  /* ---------- thread ---------- */
+  .thread {
+    padding: 12px 16px 4px;
+    height: 300px;
+    overflow-y: auto;
+  }
+  .thread::-webkit-scrollbar { width: 6px; }
+  .thread::-webkit-scrollbar-track { background: transparent; }
+  .thread::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
+
+  .empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 6px;
+    color: var(--text-faint);
+    padding: 0 20px;
+  }
+  .empty-state svg { width: 24px; height: 24px; color: var(--text-faint); }
+  .empty-state .title {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .empty-state .sub {
+    font-size: 11.5px;
+    line-height: 1.5;
+  }
+
+  .turn { margin-bottom: 14px; }
+  .turn:last-child { margin-bottom: 8px; }
+
+  .q-row { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  .q-bubble {
+    max-width: 82%;
+    background: var(--user-bg);
+    color: var(--user-text);
+    font-size: 13px;
+    line-height: 1.45;
+    padding: 8px 12px;
+    border-radius: 12px 12px 2px 12px;
+  }
+  .turn-time {
+    color: var(--text-faint);
+    font-size: 10px;
+    line-height: 1.3;
+    margin: 0 2px 5px;
+  }
+  .q-row + .turn-time { text-align: right; }
+
+  .a-row { display: flex; }
+  .a-bubble {
+    max-width: 90%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px 12px 12px 12px;
+    padding: 9px 12px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  .typing-row { display: flex; }
+  .typing-bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px 12px 12px 12px;
+    padding: 11px 14px;
+    display: flex;
+    gap: 4px;
+  }
+  .typing-bubble span {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    animation: bounce 1.3s infinite ease-in-out;
+  }
+  .typing-bubble span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-bubble span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-3px); opacity: 1; }
+  }
+
+  .error-card {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-text);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  /* ---------- quick questions ---------- */
+  .quick-questions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px 2px;
+  }
+  .quick-question {
+    appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: 0 0 auto;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    padding: 7px 10px;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .quick-question:hover:not(:disabled) {
+    background: var(--user-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .quick-question:disabled { cursor: not-allowed; opacity: 0.55; }
+
+  /* ---------- composer ---------- */
+  .composer {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #question {
+    flex: 1;
+    resize: none;
+    min-height: 20px;
+    max-height: 90px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 8px 10px;
+    transition: border-color 0.15s ease;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  #question::-webkit-scrollbar { width: 5px; }
+  #question::-webkit-scrollbar-track { background: transparent; }
+  #question::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
+  #question:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  #question::placeholder { color: var(--text-faint); }
+
+  #ask {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  #ask:hover:not(:disabled) { background: var(--accent-hover); }
+  #ask:disabled { background: var(--border); cursor: not-allowed; }
+  #ask svg { width: 15px; height: 15px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="header">
+    <div>
+      <div class="header-title">Transcript Chat</div>
+      <div class="header-sub" id="status">Detecting video…</div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggle" title="Toggle theme">
+        <svg id="sunIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        <svg id="moonIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="display:none">
+          <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/>
+        </svg>
+      </button>
+      <button class="clear-btn" id="clear">Clear</button>
+    </div>
+  </div>
+
+  <div class="thread" id="thread">
+    <div class="empty-state" id="emptyState">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 10h8M8 14h5M21 12c0 4.418-4.03 8-9 8-1.06 0-2.077-.16-3.02-.457L3 21l1.5-4.5C3.55 15.14 3 13.62 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8Z"/>
+      </svg>
+      <div class="title">No questions yet</div>
+      <div class="sub">Ask anything about this video — answers are grounded only in its transcript.</div>
+    </div>
+  </div>
+
+  <div class="quick-questions" aria-label="Quick questions">
+    <button class="quick-question" type="button" data-question="Give me a concise summary of this video.">Summary</button>
+    <button class="quick-question" type="button" data-question="What are the key takeaways from this video?">Key takeaways</button>
+  </div>
+
+  <div class="composer">
+    <textarea id="question" placeholder="Ask about this video…" rows="1"></textarea>
+    <button id="ask">
+      <svg viewBox="0 0 20 20" fill="none"><path d="M17.5 2.5L9 11M17.5 2.5L12 17.5L9 11M17.5 2.5L2.5 8L9 11" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+</div>
+<script src="popup.js"></script>
+</body>
+</html>
